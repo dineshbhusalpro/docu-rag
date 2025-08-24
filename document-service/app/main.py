@@ -3,16 +3,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import connect_to_mongo, close_mongo_connection, connect_to_qdrant
-from app.api.routes.document_routes import router as document_router
+from app.api.routes.document_routes import router
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await connect_to_mongo()
-    connect_to_qdrant()
+    logger.info("🚀 Starting Document Service...")
+    try:
+        await connect_to_mongo()
+        logger.info("✅ MongoDB connected")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to MongoDB: {e}")
+        raise
+    
+    try:
+        connect_to_qdrant()
+        logger.info("✅ Qdrant connected")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Qdrant: {e}")
+        raise
+    
+    logger.info("🎉 All services started successfully")
     yield
+    
     # Shutdown
+    logger.info("🛑 Shutting down Document Service...")
     await close_mongo_connection()
+    logger.info("👋 Goodbye!")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -29,21 +51,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes
+# Include routes with proper prefix
 app.include_router(
-    document_router,
+    router,
     prefix=f"{settings.API_V1_STR}/documents",
     tags=["documents"]
 )
 
 @app.get("/")
 async def root():
-    return {"message": "Document Service API", "version": "1.0.0"}
+    return {
+        "message": "Document Service API", 
+        "version": "1.0.0",
+        "status": "running",
+        "docs": f"{settings.API_V1_STR}/docs"
+    }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "document-service"}
+    from app.database import db
+    
+    mongo_status = "connected" if db.client else "disconnected"
+    qdrant_status = "connected" if db.qdrant_client else "disconnected"
+    
+    return {
+        "status": "healthy", 
+        "service": "document-service",
+        "mongodb": mongo_status,
+        "qdrant": qdrant_status
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

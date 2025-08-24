@@ -90,11 +90,12 @@ async def upload_document(
     chunk_size: int = Query(1000, ge=100, le=4000, description="Target size for each chunk"),
     chunk_overlap: int = Query(200, ge=0, le=1000, description="Overlap between chunks"),
     chunking_strategy: str = Query("fixed", description="Chunking strategy: fixed, sentence, semantic, paragraph, hybrid"),
+    embedding_provider: str = Query("huggingface_api", description="Embedding Provider: huggingface_api, local_model"),
     service: DocumentService = Depends(get_document_service)
 ):
     """Upload a document with specified chunking strategy"""
     try:
-        return await service.upload_document(file, chunk_size, chunk_overlap, chunking_strategy)
+        return await service.upload_document(file, chunk_size, chunk_overlap, chunking_strategy, embedding_provider)
     except Exception as e:
         # Log the full error for debugging
         import traceback
@@ -115,24 +116,36 @@ async def upload_document(
 async def list_documents(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    query: str = Query(None, description="Search query for filename or content"),
+    status: str = Query(None, description="Filter by document status"),
     service: DocumentService = Depends(get_document_service)
 ):
-    """List documents"""
-    documents = await service.list_documents(skip, limit)
-    
-    document_responses = [
-        DocumentResponse(
-            id=str(doc.id),
-            filename=doc.filename,
-            file_size=doc.file_size,
-            status=doc.status,
-            created_at=doc.created_at,
-            total_chunks=len(doc.chunks)
+    """List documents with optional search and filtering"""
+    try:
+        if query or status:
+            documents, total = await service.search_documents(query, status, skip, limit)
+        else:
+            documents = await service.list_documents(skip, limit)
+            total = await service.count_documents()
+        
+        document_responses = [
+            DocumentResponse(
+                id=str(doc.id),
+                filename=doc.filename,
+                file_size=doc.file_size,
+                status=doc.status,
+                created_at=doc.created_at,
+                total_chunks=len(doc.chunks)
+            )
+            for doc in documents
+        ]
+        
+        return DocumentList(
+            documents=document_responses, 
+            total=total
         )
-        for doc in documents
-    ]
-    
-    return DocumentList(documents=document_responses, total=len(document_responses))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
 
 @router.get("/{document_id}", response_model=DocumentDetail)
 async def get_document(

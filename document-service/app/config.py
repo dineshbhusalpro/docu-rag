@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Hugging-face API
     USE_HUGGINGFACE_API: bool = True
     HUGGINGFACE_API_KEY: Optional[str] = None
-    HUGGINGFACE_API_URL: str = "https://api-inference.huggingface.co"
+    API_EMBEDDING_MODEL_URL: str = "https://router.huggingface.co/hf-inference/models/{model}/pipeline/feature-extraction"
     
     class Config:
         env_file = ".env"

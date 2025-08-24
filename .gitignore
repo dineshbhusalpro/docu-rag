@@ -29,3 +29,6 @@ docker-compose.override.yml
 # OS
 .DS_Store
 Thumbs.db
+
+# ignore uploads folder
+document-service/uploads/
